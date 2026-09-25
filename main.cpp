@@ -34,7 +34,10 @@ int main()
 		while (true)
 		{
 			if (GetAsyncKeyState(VK_F3) & 0b1)
+			{
 				enabled = !enabled;
+				std::cout << "Triggerbot is " << (enabled?"enabled":"disabled") << std::endl;
+			}
 
 			if (GetAsyncKeyState(VK_F4) & 0b1)
 			{

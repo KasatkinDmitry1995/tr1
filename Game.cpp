@@ -23,6 +23,7 @@ bool Game::OpenGameProcess()
 
 	in_cross_addr = base_addr + 0x1211f4;
 	is_user_in_spect_addr = base_addr + 0x12B394;
+	userPV_addr = base_addr + 0x11D470;
 
 	return true;
 }
@@ -33,6 +34,9 @@ bool Game::UpdateGameData()
 		return false;
 
 	if (!ReadProcessMemory(hlprc, (const void*)is_user_in_spect_addr, &is_user_in_spect, sizeof(is_user_in_spect), &io))
+		return false;
+
+	if (!ReadProcessMemory(hlprc, (const void*)userPV_addr, &pv, sizeof(pv), &io))
 		return false;
 
 	return true;
@@ -62,6 +66,11 @@ void Game::SendFire()
 	Sleep(50);
 	SendInput(1, &up, sizeof(INPUT));
 	Sleep(25);
+}
+
+PlayerView Game::GetPV()
+{
+	return pv;
 }
 
 bool Game::IsGameFocused()

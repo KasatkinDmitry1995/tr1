@@ -139,13 +139,18 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="DrawHelper.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="overlay.cpp" />
     <ClCompile Include="proc_utils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DrawHelper.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="overlay.h" />
     <ClInclude Include="proc_utils.h" />
+    <ClInclude Include="Structs.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

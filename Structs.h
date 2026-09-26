@@ -26,4 +26,10 @@ struct PlayerView {
     float Ya;
     float Xa;
 };
+
+struct PlayerCoords {
+    float X;
+    float Y;
+    float Z;
+};
 #pragma pack(pop)

@@ -3,16 +3,16 @@
 namespace ProcUtils
 {
 
-	bool IsGameFocused(DWORD hlPid) {
+	bool IsMainWindowFocused(DWORD pid) {
 		HWND fg = GetForegroundWindow();
 		if (!fg) return false;
 
 		DWORD fgPid = 0;
 		GetWindowThreadProcessId(fg, &fgPid);
-		return fgPid == hlPid;
+		return fgPid == pid;
 	}
 
-	unsigned int FindClientBase(_Out_ unsigned int& hl_pid, LPCWSTR procName, LPCWSTR moduleName)
+	unsigned int FindProccess(LPCWSTR procName)
 	{
 		HANDLE tlh_list;
 		unsigned int pid{ 0 }, cl_base{ 0 };
@@ -34,24 +34,30 @@ namespace ProcUtils
 		}
 		CloseHandle(tlh_list);
 
-		hl_pid = pid;
+		return pid;
+	}
+
+	unsigned int FindModule(unsigned int pid, LPCWSTR moduleName)
+	{
 
 		if (pid == 0)
 			return 0;
 
-		tlh_list = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+		HANDLE tlh_list = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
 
 		if (INVALID_HANDLE_VALUE == tlh_list)
 			return 0;
 
 		MODULEENTRY32W me{ sizeof MODULEENTRY32W };
 
+		unsigned int moduleBase = 0;
+
 		Module32First(tlh_list, &me);
 		do
 		{
 			if (lstrcmpiW(moduleName, me.szModule) == 0)
 			{
-				cl_base = reinterpret_cast<unsigned int>(me.modBaseAddr);
+				moduleBase = reinterpret_cast<unsigned int>(me.modBaseAddr);
 				break;
 			}
 
@@ -59,6 +65,6 @@ namespace ProcUtils
 
 		CloseHandle(tlh_list);
 
-		return cl_base;
+		return moduleBase;
 	}
 }

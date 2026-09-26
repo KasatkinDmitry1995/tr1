@@ -127,6 +127,20 @@ int main()
 						data.AddText(screenPos.x + 5, screenPos.y - 5, RGB(255, 0, 0), L"Object...");
 					}
 
+					for (int i = 0; i < 32; i++)
+					{
+						Vec3 coords = game.GetPlayerCoords(i);
+
+						if (coords.x == 0 && coords.y == 0 && coords.z == 0)
+							continue;
+
+						if (WorldToScreen(coords, cam, screenPos)) {
+							// Рисуем точку на экране
+							data.AddFilledRect(screenPos.x - 3, screenPos.y - 3, 6, 6, RGB(255, 0, 0));
+							data.AddText(screenPos.x + 5, screenPos.y - 5, RGB(255, 255, 0), L"Player....");
+						}
+					}
+
 				}
 				else
 					break;

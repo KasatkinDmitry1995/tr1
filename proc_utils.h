@@ -4,7 +4,8 @@
 
 namespace ProcUtils
 {
-	bool IsGameFocused(DWORD hlPid);
-	unsigned int FindClientBase(_Out_ unsigned int& hl_pid, LPCWSTR procName, LPCWSTR moduleName);
+	bool IsMainWindowFocused(DWORD pid);
+	unsigned int FindProccess(LPCWSTR procName);
+	unsigned int FindModule(unsigned int pid, LPCWSTR moduleName);
 
 }

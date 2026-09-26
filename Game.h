@@ -15,7 +15,8 @@ class Game
 	private:
 		unsigned int in_cross_addr = 0;
 		unsigned int hl_pid = 0;
-		unsigned int base_addr = 0;
+		unsigned int client_base_addr = 0;
+		unsigned int hw_base_addr = 0;
 		unsigned int is_user_in_spect_addr = 0;
 		unsigned int userPV_addr = 0;
 		HANDLE hlprc = 0;
@@ -23,6 +24,7 @@ class Game
 		unsigned char is_user_in_spect = 0;
 		SIZE_T io;
 		PlayerView pv;
+		Vec3 playersCoords[32];
 
 	public:
 		bool FindGameProccess();
@@ -33,6 +35,7 @@ class Game
 		void SendFire();
 		bool IsGameFocused();
 		void CloseHandles();
+		Vec3 GetPlayerCoords(int i);
 		PlayerView GetPV();
 }; 
 

@@ -194,7 +194,7 @@ bool CreateOverlayInternal() {
     SetLayeredWindowAttributes(g_overlayWnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
     ShowWindow(g_overlayWnd, SW_SHOW);
     UpdateWindow(g_overlayWnd);
-    SetTimer(g_overlayWnd, 1, 16, nullptr);
+    SetTimer(g_overlayWnd, 1, 5, nullptr);
     return true;
 }
 

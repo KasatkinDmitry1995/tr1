@@ -1,6 +1,8 @@
 #include "Game.h"
 #include <iostream>
 
+bool wasClickSend = false;
+
 bool Game::FindGameProccess()
 {
 
@@ -76,20 +78,30 @@ bool Game::IsUserInSpects()
 	return is_user_in_spect;
 }
 
-void Game::SendFire()
+bool Game::SendFire(int ms)
 {
-	INPUT down = {};
-	down.type = INPUT_MOUSE;
+	if (wasClickSend)
+		return false;
+
+	wasClickSend = true;
+
+	INPUT down = {}; down.type = INPUT_MOUSE;
 	down.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-
-	INPUT up = {};
-	up.type = INPUT_MOUSE;
-	up.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-
 	SendInput(1, &down, sizeof(INPUT));
-	Sleep(50);
-	SendInput(1, &up, sizeof(INPUT));
-	Sleep(25);
+
+	HANDLE t = nullptr;
+	CreateTimerQueueTimer(&t, nullptr,
+		[](PVOID p, BOOLEAN) {
+			INPUT up = {}; up.type = INPUT_MOUSE;
+			up.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+			SendInput(1, &up, sizeof(INPUT));
+			auto* wasClickSend = static_cast<bool*>(p);
+			*wasClickSend = false;
+			
+		}, &wasClickSend, ms, 0, WT_EXECUTEONLYONCE);
+
+	return true;
+
 }
 
 PlayerView Game::GetPV()

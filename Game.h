@@ -32,7 +32,7 @@ class Game
 		bool UpdateGameData();
 		_IN_CROSS_OBJECT GetInCrossObject();
 		bool IsUserInSpects();
-		void SendFire();
+		bool SendFire(int ms);
 		bool IsGameFocused();
 		void CloseHandles();
 		Vec3 GetPlayerCoords(int i);

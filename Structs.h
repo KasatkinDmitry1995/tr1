@@ -50,4 +50,9 @@ struct PlayerInfo {
     bool isDrawable;
 };
 
+struct Offsets {
+    unsigned int InCross, UserInSpect, userPV, playerAlive, 
+        playerCoords, playerStructSize, playersArray;
+};
+
 #pragma pack(pop)

@@ -23,8 +23,16 @@ bool Game::FindGameProccess()
 			if (GetAsyncKeyState(VK_F4) & 0b1)
 				return false;
 		}
-		else
+		else {
+			offsets.InCross = client_base_addr + 0x1211f4;
+			offsets.UserInSpect = client_base_addr + 0x12B394;
+			offsets.userPV = client_base_addr + 0x11D470;
+			offsets.playerAlive = 0x17C;
+			offsets.playerCoords = 0x188;
+			offsets.playerStructSize = 0x250;
+			offsets.playersArray = hw_base_addr + 0x9E40A;
 			return true;
+		}
 	}
 
 }
@@ -36,43 +44,42 @@ bool Game::OpenGameProcess()
 	if (!hlprc) 
 		return false;
 
-	in_cross_addr = client_base_addr + 0x1211f4;
-	is_user_in_spect_addr = client_base_addr + 0x12B394;
-	userPV_addr = client_base_addr + 0x11D470;
-
 	return true;
 }
 
 bool Game::UpdateGameData()
 {
-	if (!ReadProcessMemory(hlprc, (const void*)in_cross_addr, &in_cross, sizeof(in_cross), &io))
+	if (!ReadProcessMemory(hlprc, (const void*)offsets.InCross, &in_cross, sizeof(in_cross), &io))
 		return false;
 
-	if (!ReadProcessMemory(hlprc, (const void*)is_user_in_spect_addr, &is_user_in_spect, sizeof(is_user_in_spect), &io))
+	if (!ReadProcessMemory(hlprc, (const void*)offsets.UserInSpect, &is_user_in_spect, sizeof(is_user_in_spect), &io))
 		return false;
 
-	if (!ReadProcessMemory(hlprc, (const void*)userPV_addr, &pv, sizeof(pv), &io))
+	if (!ReadProcessMemory(hlprc, (const void*)offsets.userPV, &pv, sizeof(pv), &io))
 		return false;
 
 	unsigned int ptr = 0;
 
-	if (!ReadProcessMemory(hlprc, (const void*)(hw_base_addr + 0x9E40A), &ptr, sizeof(unsigned int), &io))
+	if (!ReadProcessMemory(hlprc, (const void*)offsets.playersArray, &ptr, sizeof(unsigned int), &io))
 		return false;
 
 	byte pState;
 
+
 	for (int i = 0; i < 32; i++)
 	{
 
+		unsigned int base = ptr + i * offsets.playerStructSize;
+
 		playersInfo[i].lastCoords = playersInfo[i].coords;
 
-		if (!ReadProcessMemory(hlprc, (const void*)(ptr + i * 0x250 + 0x188), &(playersInfo[i].coords), sizeof(Vec3), &io))
+		if (!ReadProcessMemory(hlprc, (const void*)(base + offsets.playerCoords), &(playersInfo[i].coords), sizeof(Vec3), &io))
 			return false;
 
 		unsigned char isAlive;
 		bool updated = true;
 
-		if (!ReadProcessMemory(hlprc, (const void*)(ptr + i * 0x250 + 0x17C), &isAlive, sizeof(unsigned char), &io))
+		if (!ReadProcessMemory(hlprc, (const void*)(base + offsets.playerAlive), &isAlive, sizeof(unsigned char), &io))
 			return false;
 
 		if (playersInfo[i].coords != playersInfo[i].lastCoords)

@@ -67,7 +67,7 @@ bool Game::UpdateGameData()
 
 	byte pState;
 
-	std::set<std::string> t_models = { "terror", "leet", "arctic", "guerilla"};
+	std::set<std::string> t_models = { "terror", "arab", "arctic", "guerilla"};
 	std::set<std::string> ct_models = { "urban", "gsg9", "sas", "gign"};
 
 	for (int i = 0; i < 32; i++)

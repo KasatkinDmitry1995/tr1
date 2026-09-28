@@ -122,8 +122,10 @@ int main()
 					float dy = pi.coords.Y - pv.Y;
 					float dz = pi.coords.Z - pv.Z;
 
-					float thickness = 1000/sqrtf(dx * dx + dy * dy + dz * dz);
-					COLORREF color = RGB(255, 128, 0);
+					float thickness = fmax(1.f, fmin(5.f, 1000/sqrtf(dx * dx + dy * dy + dz * dz)));
+					COLORREF color = pi.isT ? RGB(255, 50, 50): RGB(50, 50, 255);
+
+					
 
 					Vec2 p[8];
 

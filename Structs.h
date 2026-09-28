@@ -47,12 +47,13 @@ struct PlayerInfo {
     PlayerCoords coords;
     PlayerCoords lastCoords;
     long lastTimePosChanged;
+    bool isT;
     bool isDrawable;
 };
 
 struct Offsets {
     unsigned int InCross, UserInSpect, userPV, playerAlive, 
-        playerCoords, playerStructSize, playersArray;
+        playerCoords, playerStructSize, playersArray, playerModel; 
 };
 
 #pragma pack(pop)

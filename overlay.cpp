@@ -100,6 +100,19 @@ void DrawOverlay(HWND hwnd) {
             SetTextColor(hdcMem, t.color);
             TextOutW(hdcMem, (int)t.x, (int)t.y, t.text, (int)wcslen(t.text));
         }
+
+        // Линии
+        for (const auto& l : g_data.wrects) {
+            HPEN pen = CreatePen(PS_SOLID, (int)l.thickness, l.color);
+            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
+            MoveToEx(hdcMem, (int)l.p1.x, (int)l.p1.y, nullptr);
+            LineTo(hdcMem, (int)l.p2.x, (int)l.p2.y);
+            LineTo(hdcMem, (int)l.p3.x, (int)l.p3.y);
+            LineTo(hdcMem, (int)l.p4.x, (int)l.p4.y);
+            LineTo(hdcMem, (int)l.p1.x, (int)l.p1.y);
+            SelectObject(hdcMem, oldPen);
+            DeleteObject(pen);
+        }
     }
 
     BitBlt(hdcScreen, 0, 0, g_cx, g_cy, hdcMem, 0, 0, SRCCOPY);

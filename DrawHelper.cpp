@@ -21,9 +21,8 @@ bool DrawHelper::WorldToScreen(const Vec3& worldPos, Vec2& screenPos) {
     float rotatedZ = -localY * sinPitch + localZ * cosPitch;
 
     // 5. Проверка: точка перед камерой?
-    if (rotatedY <= 0.01f) {
+    if (rotatedY <= 0.01f)
         return false; // Точка позади или слишком близко
-    }
 
     float screenX = (localX / rotatedY) * focalLength + (cam.screenW / 2.0f);
     float screenY = -(rotatedZ / rotatedY) * focalLength + (cam.screenH / 2.0f);

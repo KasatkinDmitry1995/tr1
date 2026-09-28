@@ -18,7 +18,6 @@ int main()
 		dH.cam.screenW = 1760;
 		dH.cam.screenH = 990;
 
-		Vec3 coords;
 		Vec2 screenPos;
 
 		_IN_CROSS_OBJECT prev_val = _IN_CROSS_OBJECT::INC_CROSS_CLEAR;
@@ -69,9 +68,11 @@ int main()
 				return 0;
 			}
 
-			if (enabled && game.IsGameFocused())
+			
 
-				if (game.UpdateGameData())
+			if (game.UpdateGameData())
+			{
+				if (enabled && game.IsGameFocused())
 				{
 
 					data.Clear();
@@ -80,15 +81,15 @@ int main()
 					{
 						switch (game.GetInCrossObject())
 						{
-							case _IN_CROSS_OBJECT::INC_ENEMY:
-								std::cout << "Enemy in the cross...." << std::endl;
-								break;
-							case _IN_CROSS_OBJECT::INC_FRIEND:
-								std::cout << "Friend in the cross....." << std::endl;
-								break;
-							case _IN_CROSS_OBJECT::INC_HOSTAGE:
-								std::cout << "Hostage in the cross..." << std::endl;
-								break;
+						case _IN_CROSS_OBJECT::INC_ENEMY:
+							std::cout << "Enemy in the cross...." << std::endl;
+							break;
+						case _IN_CROSS_OBJECT::INC_FRIEND:
+							std::cout << "Friend in the cross....." << std::endl;
+							break;
+						case _IN_CROSS_OBJECT::INC_HOSTAGE:
+							std::cout << "Hostage in the cross..." << std::endl;
+							break;
 						}
 
 						prev_val = game.GetInCrossObject();
@@ -96,35 +97,62 @@ int main()
 
 					if (game.GetInCrossObject() == _IN_CROSS_OBJECT::INC_ENEMY
 						&& !game.IsUserInSpects())
+							if (game.SendFire(150))
+								std::cout << "firing...." << std::endl;
+
+				}
+
+				PlayerView pv = game.GetPV();
+
+				dH.cam.position = { pv.X, pv.Y, pv.Z };
+				dH.cam.yaw = pv.Xa;  // в градусах
+				dH.cam.pitch = -pv.Ya;  // в градусах
+				dH.UpdateCamData();
+
+				PlayerInfo pi;
+
+				for (int i = 0; i < 32; i++)
+				{
+					pi = game.GetPlayerInfo(i);
+
+					if (!pi.isDrawable || (pi.coords.X == 0 && pi.coords.Y == 0 && pi.coords.Z == 0))
+						continue;
+
+					float dx = pi.coords.X - pv.X;
+					float dy = pi.coords.Y - pv.Y;
+					float dz = pi.coords.Z - pv.Z;
+
+					float thickness = 1000/sqrtf(dx * dx + dy * dy + dz * dz);
+					COLORREF color = RGB(255, 128, 0);
+
+					Vec2 p[8];
+
+					if (dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y + 15, pi.coords.Z + 10 }, p[0])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y + 15, pi.coords.Z - 50 }, p[1])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y - 15, pi.coords.Z + 10 }, p[2])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y - 15, pi.coords.Z - 50 }, p[3])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y + 15, pi.coords.Z + 10 }, p[4])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y + 15, pi.coords.Z - 50 }, p[5])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y - 15, pi.coords.Z + 10 }, p[6])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y - 15, pi.coords.Z - 50 }, p[7]))
 					{
-						int cx = 640, cy = 360; // примерные координаты центра
-						data.AddCircle(cx, cy, 15, RGB(0, 200, 0), 1.0f);
-					
-						if(game.SendFire(150))
-							std::cout << "firing...." << std::endl;
-					}
-
-					PlayerView pv = game.GetPV();
-
-					dH.cam.position = { pv.X, pv.Y, pv.Z };
-					dH.cam.yaw = pv.Xa;  // в градусах
-					dH.cam.pitch = -pv.Ya;  // в градусах
-					dH.UpdateCamData();
-
-					for (int i = 0; i < 32; i++)
-					{
-						coords = game.GetPlayerCoords(i);
-
-						if (coords.x == 0 && coords.y == 0 && coords.z == 0)
-							continue;
-
-						if (dH.WorldToScreen(coords, screenPos)) {
-							data.AddFilledRect(screenPos.x - 3, screenPos.y - 3, 6, 6, RGB(255, 0, 0));
-							data.AddText(screenPos.x + 5, screenPos.y - 5, RGB(255, 255, 0), L"Player....");
-						}
+						data.AddLine(p[0].x, p[0].y, p[1].x, p[1].y, color, thickness);
+						data.AddLine(p[2].x, p[2].y, p[3].x, p[3].y, color, thickness);
+						data.AddLine(p[4].x, p[4].y, p[5].x, p[5].y, color, thickness);
+						data.AddLine(p[6].x, p[6].y, p[7].x, p[7].y, color, thickness);
+						data.AddLine(p[0].x, p[0].y, p[2].x, p[2].y, color, thickness);
+						data.AddLine(p[0].x, p[0].y, p[4].x, p[4].y, color, thickness);
+						data.AddLine(p[2].x, p[2].y, p[6].x, p[6].y, color, thickness);
+						data.AddLine(p[4].x, p[4].y, p[6].x, p[6].y, color, thickness);
+						data.AddLine(p[1].x, p[1].y, p[3].x, p[3].y, color, thickness);
+						data.AddLine(p[1].x, p[1].y, p[5].x, p[5].y, color, thickness);
+						data.AddLine(p[3].x, p[3].y, p[7].x, p[7].y, color, thickness);
+						data.AddLine(p[5].x, p[5].y, p[7].x, p[7].y, color, thickness);
 					}
 
 				}
+
+			}
 				else
 					break;
 

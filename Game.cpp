@@ -59,10 +59,30 @@ bool Game::UpdateGameData()
 	if (!ReadProcessMemory(hlprc, (const void*)(hw_base_addr + 0x9E40A), &ptr, sizeof(unsigned int), &io))
 		return false;
 
+	byte pState;
+
 	for (int i = 0; i < 32; i++)
 	{
-		if (!ReadProcessMemory(hlprc, (const void*)(ptr + i * 0x250 + 0x188), &playersCoords[i], sizeof(Vec3), &io))
+
+		playersInfo[i].lastCoords = playersInfo[i].coords;
+
+		if (!ReadProcessMemory(hlprc, (const void*)(ptr + i * 0x250 + 0x188), &(playersInfo[i].coords), sizeof(Vec3), &io))
 			return false;
+
+		unsigned char isAlive;
+		bool updated = true;
+
+		if (!ReadProcessMemory(hlprc, (const void*)(ptr + i * 0x250 + 0x17C), &isAlive, sizeof(unsigned char), &io))
+			return false;
+
+		if (playersInfo[i].coords != playersInfo[i].lastCoords)
+			playersInfo[i].lastTimePosChanged = GetTickCount64();
+		else
+			if (GetTickCount64()  - playersInfo[i].lastTimePosChanged > 5000)
+				updated = false;
+			
+		playersInfo[i].isDrawable = updated && isAlive != 0;
+
 	}
 
 	return true;
@@ -109,9 +129,9 @@ PlayerView Game::GetPV()
 	return pv;
 }
 
-Vec3 Game::GetPlayerCoords(int i)
+PlayerInfo Game::GetPlayerInfo(int i)
 {
-	return playersCoords[i];
+	return playersInfo[i];
 }
 
 bool Game::IsGameFocused()

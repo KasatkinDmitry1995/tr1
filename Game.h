@@ -24,7 +24,7 @@ class Game
 		unsigned char is_user_in_spect = 0;
 		SIZE_T io;
 		PlayerView pv;
-		Vec3 playersCoords[32];
+		PlayerInfo playersInfo[32];
 
 	public:
 		bool FindGameProccess();
@@ -35,7 +35,7 @@ class Game
 		bool SendFire(int ms);
 		bool IsGameFocused();
 		void CloseHandles();
-		Vec3 GetPlayerCoords(int i);
+		PlayerInfo GetPlayerInfo(int i);
 		PlayerView GetPV();
 }; 
 

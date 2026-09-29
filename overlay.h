@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Windows.h>
+#include "Structs.h"
 #include <vector>
 #include <mutex>
 
@@ -35,6 +36,12 @@ struct TextLabel {
     wchar_t text[128];
 };
 
+struct WorldRect {
+    Vec2 p1, p2, p3, p4;
+    COLORREF color;
+    float thickness;
+};
+
 // ---------- Контейнер данных ----------
 struct OverlayData {
     std::vector<Line>        lines;
@@ -42,6 +49,8 @@ struct OverlayData {
     std::vector<CircleShape> circles;
     std::vector<FilledRect>  filledRects;
     std::vector<TextLabel>   texts;
+    std::vector<WorldRect>   wrects;
+    int width, height;
 
     std::mutex mtx; // защита при доступе из разных потоков
 
@@ -52,6 +61,7 @@ struct OverlayData {
         circles.clear();
         filledRects.clear();
         texts.clear();
+        wrects.clear();
     }
 
     void AddLine(float x1, float y1, float x2, float y2,
@@ -90,6 +100,11 @@ struct OverlayData {
 
         std::lock_guard<std::mutex> lock(mtx);
         texts.push_back(label);
+    }
+
+    void AddWorldRect(Vec2 p1, Vec2 p2, Vec2 p3, Vec2 p4, COLORREF color, float w) {
+        std::lock_guard<std::mutex> lock(mtx);
+        wrects.push_back({ p1, p2, p3, p4, color, w });
     }
 };
 

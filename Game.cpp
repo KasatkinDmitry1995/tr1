@@ -1,17 +1,42 @@
 #include "Game.h"
 #include <iostream>
+#include <set>
+
+bool wasClickSend = false;
 
 bool Game::FindGameProccess()
 {
-	while (!(base_addr = ProcUtils::FindClientBase(hl_pid, L"hl.exe", L"client.dll")))
+
+	while (true)
 	{
-		Sleep(200);
-				
-		if (GetAsyncKeyState(VK_F4) & 0b1)
-			return false;
+		hl_pid = ProcUtils::FindProccess(L"hl.exe");
+
+		if (hl_pid != 0)
+			client_base_addr = ProcUtils::FindModule(hl_pid, L"client.dll");
+
+		if (client_base_addr != 0)
+			 hw_base_addr = ProcUtils::FindModule(hl_pid, L"hw.dll");
+
+		if (!hl_pid || !client_base_addr || !hw_base_addr)
+		{
+			Sleep(200);
+
+			if (GetAsyncKeyState(VK_F4) & 0b1)
+				return false;
+		}
+		else {
+			offsets.InCross = client_base_addr + 0x1211f4;
+			offsets.UserInSpect = client_base_addr + 0x12B394;
+			offsets.userPV = client_base_addr + 0x11D470;
+			offsets.playerModel = 0x130;
+			offsets.playerAlive = 0x17C;
+			offsets.playerCoords = 0x188;
+			offsets.playerStructSize = 0x250;
+			offsets.playersArray = hw_base_addr + 0x9E40A;
+			return true;
+		}
 	}
 
-	return true;
 }
 
 bool Game::OpenGameProcess()
@@ -21,23 +46,65 @@ bool Game::OpenGameProcess()
 	if (!hlprc) 
 		return false;
 
-	in_cross_addr = base_addr + 0x1211f4;
-	is_user_in_spect_addr = base_addr + 0x12B394;
-	userPV_addr = base_addr + 0x11D470;
-
 	return true;
 }
 
 bool Game::UpdateGameData()
 {
-	if (!ReadProcessMemory(hlprc, (const void*)in_cross_addr, &in_cross, sizeof(in_cross), &io))
+	if (!ReadProcessMemory(hlprc, (LPCVOID)offsets.InCross, &in_cross, sizeof(in_cross), &io))
 		return false;
 
-	if (!ReadProcessMemory(hlprc, (const void*)is_user_in_spect_addr, &is_user_in_spect, sizeof(is_user_in_spect), &io))
+	if (!ReadProcessMemory(hlprc, (LPCVOID)offsets.UserInSpect, &is_user_in_spect, sizeof(is_user_in_spect), &io))
 		return false;
 
-	if (!ReadProcessMemory(hlprc, (const void*)userPV_addr, &pv, sizeof(pv), &io))
+	if (!ReadProcessMemory(hlprc, (LPCVOID)offsets.userPV, &pv, sizeof(pv), &io))
 		return false;
+
+	unsigned int ptr = 0;
+
+	if (!ReadProcessMemory(hlprc, (LPCVOID)offsets.playersArray, &ptr, sizeof(unsigned int), &io))
+		return false;
+
+	byte pState;
+
+	std::set<std::string> t_models = { "terror", "leet", "arctic", "guerilla"};
+	std::set<std::string> ct_models = { "urban", "gsg9", "sas", "gign"};
+
+	for (int i = 0; i < 32; i++)
+	{
+
+		unsigned int base = ptr + i * offsets.playerStructSize;
+
+		playersInfo[i].lastCoords = playersInfo[i].coords;
+
+		if (!ReadProcessMemory(hlprc, (LPCVOID)(base + offsets.playerCoords), &(playersInfo[i].coords), sizeof(Vec3), &io))
+			return false;
+
+		unsigned char isAlive;
+		bool updated = true;
+
+		if (!ReadProcessMemory(hlprc, (LPCVOID)(base + offsets.playerAlive), &isAlive, sizeof(unsigned char), &io))
+			return false;
+
+		if (playersInfo[i].coords != playersInfo[i].lastCoords)
+			playersInfo[i].lastTimePosChanged = GetTickCount64();
+		else
+			if (GetTickCount64()  - playersInfo[i].lastTimePosChanged > 5000)
+				updated = false;
+			
+		playersInfo[i].isDrawable = updated && isAlive != 0;
+
+		char buf[16];
+
+		if (!ReadProcessMemory(hlprc, (LPCVOID)(base + offsets.playerModel), &buf, sizeof(buf), &io))
+			return false;
+
+		buf[15] = 0;
+		std::string playerModel_s = std::string(buf);
+
+		playersInfo[i].isT = t_models.count(playerModel_s);
+
+	}
 
 	return true;
 }
@@ -52,20 +119,30 @@ bool Game::IsUserInSpects()
 	return is_user_in_spect;
 }
 
-void Game::SendFire()
+bool Game::SendFire(int ms)
 {
-	INPUT down = {};
-	down.type = INPUT_MOUSE;
+	if (wasClickSend)
+		return false;
+
+	wasClickSend = true;
+
+	INPUT down = {}; down.type = INPUT_MOUSE;
 	down.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-
-	INPUT up = {};
-	up.type = INPUT_MOUSE;
-	up.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-
 	SendInput(1, &down, sizeof(INPUT));
-	Sleep(50);
-	SendInput(1, &up, sizeof(INPUT));
-	Sleep(25);
+
+	HANDLE t = nullptr;
+	CreateTimerQueueTimer(&t, nullptr,
+		[](PVOID p, BOOLEAN) {
+			INPUT up = {}; up.type = INPUT_MOUSE;
+			up.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+			SendInput(1, &up, sizeof(INPUT));
+			auto* wasClickSend = static_cast<bool*>(p);
+			*wasClickSend = false;
+			
+		}, &wasClickSend, ms, 0, WT_EXECUTEONLYONCE);
+
+	return true;
+
 }
 
 PlayerView Game::GetPV()
@@ -73,9 +150,14 @@ PlayerView Game::GetPV()
 	return pv;
 }
 
+PlayerInfo Game::GetPlayerInfo(int i)
+{
+	return playersInfo[i];
+}
+
 bool Game::IsGameFocused()
 {
-	return ProcUtils::IsGameFocused(hl_pid);
+	return ProcUtils::IsMainWindowFocused(hl_pid);
 }
 
 void Game::CloseHandles()

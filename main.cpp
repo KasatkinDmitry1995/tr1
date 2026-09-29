@@ -13,6 +13,8 @@ int main()
 	while(true)
 	{	
 		
+		Vec2 screenPos;
+
 		_IN_CROSS_OBJECT prev_val = _IN_CROSS_OBJECT::INC_CROSS_CLEAR;
 		bool enabled = true;
 
@@ -41,11 +43,15 @@ int main()
 		}
 
 		OverlayData& data = GetOverlayData();
-
+		DrawHelper dH;
+		dH.cam.fov = 90.0f;         // стандартный FOV для CS 1.6
+		
 		while (true)
 		{
-
 			data.Clear();
+
+			dH.cam.screenW = data.width;
+			dH.cam.screenH = data.height;
 
 			if (GetAsyncKeyState(VK_F3) & 0b1)
 			{
@@ -61,9 +67,11 @@ int main()
 				return 0;
 			}
 
-			if (enabled && game.IsGameFocused())
+			
 
-				if (game.UpdateGameData())
+			if (game.UpdateGameData())
+			{
+				if (enabled && game.IsGameFocused())
 				{
 
 					data.Clear();
@@ -72,15 +80,15 @@ int main()
 					{
 						switch (game.GetInCrossObject())
 						{
-							case _IN_CROSS_OBJECT::INC_ENEMY:
-								std::cout << "Enemy in the cross...." << std::endl;
-								break;
-							case _IN_CROSS_OBJECT::INC_FRIEND:
-								std::cout << "Friend in the cross....." << std::endl;
-								break;
-							case _IN_CROSS_OBJECT::INC_HOSTAGE:
-								std::cout << "Hostage in the cross..." << std::endl;
-								break;
+						case _IN_CROSS_OBJECT::INC_ENEMY:
+							std::cout << "Enemy in the cross...." << std::endl;
+							break;
+						case _IN_CROSS_OBJECT::INC_FRIEND:
+							std::cout << "Friend in the cross....." << std::endl;
+							break;
+						case _IN_CROSS_OBJECT::INC_HOSTAGE:
+							std::cout << "Hostage in the cross..." << std::endl;
+							break;
 						}
 
 						prev_val = game.GetInCrossObject();
@@ -88,50 +96,68 @@ int main()
 
 					if (game.GetInCrossObject() == _IN_CROSS_OBJECT::INC_ENEMY
 						&& !game.IsUserInSpects())
+							if (game.SendFire(150))
+								std::cout << "firing...." << std::endl;
+
+				}
+
+				PlayerView pv = game.GetPV();
+
+				dH.cam.position = { pv.X, pv.Y, pv.Z };
+				dH.cam.yaw = pv.Xa;  // в градусах
+				dH.cam.pitch = -pv.Ya;  // в градусах
+				dH.UpdateCamData();
+
+				PlayerInfo pi;
+
+				for (int i = 0; i < 32; i++)
+				{
+					pi = game.GetPlayerInfo(i);
+
+					if (!pi.isDrawable || (pi.coords.X == 0 && pi.coords.Y == 0 && pi.coords.Z == 0))
+						continue;
+
+					float dx = pi.coords.X - pv.X;
+					float dy = pi.coords.Y - pv.Y;
+					float dz = pi.coords.Z - pv.Z;
+
+					float thickness = fmax(1.f, fmin(5.f, 1000/sqrtf(dx * dx + dy * dy + dz * dz)));
+					COLORREF color = pi.isT ? RGB(255, 50, 50): RGB(50, 50, 255);
+
+					
+
+					Vec2 p[8];
+
+					if (dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y + 15, pi.coords.Z + 10 }, p[0])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y + 15, pi.coords.Z - 50 }, p[1])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y - 15, pi.coords.Z + 10 }, p[2])
+						&& dH.WorldToScreen({ pi.coords.X + 15, pi.coords.Y - 15, pi.coords.Z - 50 }, p[3])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y + 15, pi.coords.Z + 10 }, p[4])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y + 15, pi.coords.Z - 50 }, p[5])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y - 15, pi.coords.Z + 10 }, p[6])
+						&& dH.WorldToScreen({ pi.coords.X - 15, pi.coords.Y - 15, pi.coords.Z - 50 }, p[7]))
 					{
-						int cx = 640, cy = 360; // примерные координаты центра
-						data.AddCircle(cx, cy, 15, RGB(0, 200, 0), 1.0f);
-						std::cout << "firing...." << std::endl;
-						game.SendFire();
-					}
-
-					PlayerView pv = game.GetPV();
-
-					data.AddFilledRect(130, 130, 350, 70, RGB(255, 230, 200));
-					data.AddText(140, 135, RGB(0, 0, 255), L"X:%f  Y:%f  Z:%f", pv.X, pv.Y, pv.Z);
-					data.AddText(140, 155, RGB(0, 0, 255), L"Xangle:%f   Yangle :%f", pv.Xa, pv.Ya);
-
-					Camera cam;
-					cam.position = { pv.X, pv.Y, pv.Z };
-					cam.yaw = pv.Xa;  // в градусах
-					cam.pitch = -pv.Ya;  // в градусах
-					cam.fov = 90.0f;         // стандартный FOV для CS 1.6
-					cam.screenW = 1280;
-					cam.screenH = 720;
-
-					// Точка в мире (например, позиция врага)
-					Vec3 Pos1 = { 100.0f, 200.0f, 100.0f };
-					Vec3 Pos2 = { 300.0f, 400.0f, 100.0f };
-
-					// Проецируем
-					Vec2 screenPos;
-					if (WorldToScreen(Pos1, cam, screenPos)) {
-						// Рисуем точку на экране
-						data.AddFilledRect(screenPos.x - 3, screenPos.y - 3, 6, 6, RGB(255, 0, 0));
-						data.AddText(screenPos.x + 5, screenPos.y - 5, RGB(255, 255, 0), L"Something on the map...");
-					}
-
-					if (WorldToScreen(Pos2, cam, screenPos)) {
-						// Рисуем точку на экране
-						data.AddFilledRect(screenPos.x - 10, screenPos.y - 10, 20, 20, RGB(0, 0, 255));
-						data.AddText(screenPos.x + 5, screenPos.y - 5, RGB(255, 0, 0), L"Object...");
+						data.AddLine(p[0].x, p[0].y, p[1].x, p[1].y, color, thickness);
+						data.AddLine(p[2].x, p[2].y, p[3].x, p[3].y, color, thickness);
+						data.AddLine(p[4].x, p[4].y, p[5].x, p[5].y, color, thickness);
+						data.AddLine(p[6].x, p[6].y, p[7].x, p[7].y, color, thickness);
+						data.AddLine(p[0].x, p[0].y, p[2].x, p[2].y, color, thickness);
+						data.AddLine(p[0].x, p[0].y, p[4].x, p[4].y, color, thickness);
+						data.AddLine(p[2].x, p[2].y, p[6].x, p[6].y, color, thickness);
+						data.AddLine(p[4].x, p[4].y, p[6].x, p[6].y, color, thickness);
+						data.AddLine(p[1].x, p[1].y, p[3].x, p[3].y, color, thickness);
+						data.AddLine(p[1].x, p[1].y, p[5].x, p[5].y, color, thickness);
+						data.AddLine(p[3].x, p[3].y, p[7].x, p[7].y, color, thickness);
+						data.AddLine(p[5].x, p[5].y, p[7].x, p[7].y, color, thickness);
 					}
 
 				}
+
+			}
 				else
 					break;
 
-			Sleep(15);
+			Sleep(5);
 		}
 
 	}

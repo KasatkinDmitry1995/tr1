@@ -100,6 +100,19 @@ void DrawOverlay(HWND hwnd) {
             SetTextColor(hdcMem, t.color);
             TextOutW(hdcMem, (int)t.x, (int)t.y, t.text, (int)wcslen(t.text));
         }
+
+        // Линии
+        for (const auto& l : g_data.wrects) {
+            HPEN pen = CreatePen(PS_SOLID, (int)l.thickness, l.color);
+            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
+            MoveToEx(hdcMem, (int)l.p1.x, (int)l.p1.y, nullptr);
+            LineTo(hdcMem, (int)l.p2.x, (int)l.p2.y);
+            LineTo(hdcMem, (int)l.p3.x, (int)l.p3.y);
+            LineTo(hdcMem, (int)l.p4.x, (int)l.p4.y);
+            LineTo(hdcMem, (int)l.p1.x, (int)l.p1.y);
+            SelectObject(hdcMem, oldPen);
+            DeleteObject(pen);
+        }
     }
 
     BitBlt(hdcScreen, 0, 0, g_cx, g_cy, hdcMem, 0, 0, SRCCOPY);
@@ -143,6 +156,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             g_cy = newCy;
         }
 
+        g_data.width = g_cx;
+        g_data.height = g_cy;
+
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -180,7 +196,7 @@ bool CreateOverlayInternal() {
     RegisterClassW(&wc);
 
     g_overlayWnd = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         CLASS_NAME, L"", WS_POPUP,
         pt.x, pt.y, g_cx, g_cy,
         nullptr, nullptr, hInstance, nullptr
@@ -194,7 +210,7 @@ bool CreateOverlayInternal() {
     SetLayeredWindowAttributes(g_overlayWnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
     ShowWindow(g_overlayWnd, SW_SHOW);
     UpdateWindow(g_overlayWnd);
-    SetTimer(g_overlayWnd, 1, 16, nullptr);
+    SetTimer(g_overlayWnd, 1, 5, nullptr);
     return true;
 }
 

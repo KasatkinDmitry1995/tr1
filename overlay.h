@@ -50,6 +50,7 @@ struct OverlayData {
     std::vector<FilledRect>  filledRects;
     std::vector<TextLabel>   texts;
     std::vector<WorldRect>   wrects;
+    int width, height;
 
     std::mutex mtx; // защита при доступе из разных потоков
 

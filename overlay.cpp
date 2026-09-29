@@ -156,6 +156,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             g_cy = newCy;
         }
 
+        g_data.width = g_cx;
+        g_data.height = g_cy;
+
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -193,7 +196,7 @@ bool CreateOverlayInternal() {
     RegisterClassW(&wc);
 
     g_overlayWnd = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         CLASS_NAME, L"", WS_POPUP,
         pt.x, pt.y, g_cx, g_cy,
         nullptr, nullptr, hInstance, nullptr

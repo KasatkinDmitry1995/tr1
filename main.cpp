@@ -13,11 +13,6 @@ int main()
 	while(true)
 	{	
 		
-		DrawHelper dH;
-		dH.cam.fov = 90.0f;         // стандартный FOV для CS 1.6
-		dH.cam.screenW = 1760;
-		dH.cam.screenH = 990;
-
 		Vec2 screenPos;
 
 		_IN_CROSS_OBJECT prev_val = _IN_CROSS_OBJECT::INC_CROSS_CLEAR;
@@ -48,11 +43,15 @@ int main()
 		}
 
 		OverlayData& data = GetOverlayData();
-
+		DrawHelper dH;
+		dH.cam.fov = 90.0f;         // стандартный FOV для CS 1.6
+		
 		while (true)
 		{
-
 			data.Clear();
+
+			dH.cam.screenW = data.width;
+			dH.cam.screenH = data.height;
 
 			if (GetAsyncKeyState(VK_F3) & 0b1)
 			{

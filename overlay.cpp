@@ -1,143 +1,131 @@
 // overlay.cpp
 #include "overlay.h"
-#include <cstdarg>
+
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <dcomp.h>
+#include <wrl/client.h>
+
+#include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx11.h"
+
+#include "menu.h"
+
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dcomp.lib")
+
+OverlayData data;
+
+using namespace Microsoft::WRL;
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 namespace {
     HWND  g_overlayWnd = nullptr;
     HWND  g_targetWnd = nullptr;
-    HANDLE g_overlayThread = nullptr;
-    DWORD g_overlayThreadId = 0;
-    bool  g_running = false;
-
     int   g_cx = 0, g_cy = 0;
 
-    // Глобальный контейнер данных
-    OverlayData g_data;
+    ComPtr<ID3D11Device>            g_d3dDevice;
+    ComPtr<ID3D11DeviceContext>     g_d3dContext;
+    ComPtr<IDXGISwapChain1>         g_swapChain;
+    ComPtr<IDCompositionDevice>     g_dcompDevice;
+    ComPtr<IDCompositionTarget>     g_dcompTarget;
+    ComPtr<IDCompositionVisual>     g_dcompVisual;
+    ComPtr<ID3D11RenderTargetView>  g_renderTargetView;
+
+    bool g_imguiInitialized = false;
+    bool g_quitRequested = false;
+
+    // Внутренние функции
+    bool InitD3D11(HWND hwnd, int width, int height);
+    bool InitComposition(HWND hwnd);
+    bool CreateRTV();
+    void UpdateOverlayPosition();
+    ImU32 ToImU32(const OverlayColor& c);
 }
 
-// ---------- Поиск окна CS 1.6 ----------
-BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    wchar_t title[256];
-    GetWindowTextW(hwnd, title, 256);
-    if (wcsstr(title, L"Counter-Strike") != nullptr && IsWindowVisible(hwnd)) {
-        *(HWND*)lParam = hwnd;
-        return FALSE;
-    }
-    return TRUE;
-}
 
-HWND FindCSWindow() {
-    HWND result = nullptr;
-    EnumWindows(EnumWindowsProc, (LPARAM)&result);
-    return result;
-}
-
-// ---------- Отрисовка ----------
-void DrawOverlay(HWND hwnd) {
-    HDC hdcScreen = GetDC(hwnd);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hbmMem = CreateCompatibleBitmap(hdcScreen, g_cx, g_cy);
-    HGDIOBJ oldBmp = SelectObject(hdcMem, hbmMem);
-
-    // Чёрный фон (прозрачный)
-    RECT rc = { 0, 0, g_cx, g_cy };
-    HBRUSH bg = CreateSolidBrush(RGB(0, 0, 0));
-    FillRect(hdcMem, &rc, bg);
-    DeleteObject(bg);
-
-    // Рисуем всё, что накопилось в g_data.
-    // Блокируем мьютекс на время отрисовки, чтобы данные не изменились посередине.
-    {
-        std::lock_guard<std::mutex> lock(g_data.mtx);
-
-        // Залитые прямоугольники
-        for (const auto& r : g_data.filledRects) {
-            RECT rr = { (LONG)r.x, (LONG)r.y,
-                        (LONG)(r.x + r.w), (LONG)(r.y + r.h) };
-            HBRUSH brush = CreateSolidBrush(r.color);
-            FillRect(hdcMem, &rr, brush);
-            DeleteObject(brush);
-        }
-
-        // Линии
-        for (const auto& l : g_data.lines) {
-            HPEN pen = CreatePen(PS_SOLID, (int)l.thickness, l.color);
-            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
-            MoveToEx(hdcMem, (int)l.x1, (int)l.y1, nullptr);
-            LineTo(hdcMem, (int)l.x2, (int)l.y2);
-            SelectObject(hdcMem, oldPen);
-            DeleteObject(pen);
-        }
-
-        // Прямоугольники
-        for (const auto& r : g_data.rects) {
-            HPEN pen = CreatePen(PS_SOLID, (int)r.thickness, r.color);
-            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
-            HGDIOBJ oldBrush = SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
-            Rectangle(hdcMem, (int)r.x, (int)r.y,
-                (int)(r.x + r.w), (int)(r.y + r.h));
-            SelectObject(hdcMem, oldBrush);
-            SelectObject(hdcMem, oldPen);
-            DeleteObject(pen);
-        }
-
-        // Круги
-        for (const auto& c : g_data.circles) {
-            HPEN pen = CreatePen(PS_SOLID, (int)c.thickness, c.color);
-            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
-            HGDIOBJ oldBrush = SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
-            Ellipse(hdcMem,
-                (int)(c.cx - c.radius), (int)(c.cy - c.radius),
-                (int)(c.cx + c.radius), (int)(c.cy + c.radius));
-            SelectObject(hdcMem, oldBrush);
-            SelectObject(hdcMem, oldPen);
-            DeleteObject(pen);
-        }
-
-        // Текст
-        SetBkMode(hdcMem, TRANSPARENT);
-        for (const auto& t : g_data.texts) {
-            SetTextColor(hdcMem, t.color);
-            TextOutW(hdcMem, (int)t.x, (int)t.y, t.text, (int)wcslen(t.text));
-        }
-
-        // Линии
-        for (const auto& l : g_data.wrects) {
-            HPEN pen = CreatePen(PS_SOLID, (int)l.thickness, l.color);
-            HGDIOBJ oldPen = SelectObject(hdcMem, pen);
-            MoveToEx(hdcMem, (int)l.p1.x, (int)l.p1.y, nullptr);
-            LineTo(hdcMem, (int)l.p2.x, (int)l.p2.y);
-            LineTo(hdcMem, (int)l.p3.x, (int)l.p3.y);
-            LineTo(hdcMem, (int)l.p4.x, (int)l.p4.y);
-            LineTo(hdcMem, (int)l.p1.x, (int)l.p1.y);
-            SelectObject(hdcMem, oldPen);
-            DeleteObject(pen);
-        }
+// ---------- Внутренние ----------
+namespace {
+    ImU32 ToImU32(const OverlayColor& c) {
+        return IM_COL32(c.r, c.g, c.b, c.a);
     }
 
-    BitBlt(hdcScreen, 0, 0, g_cx, g_cy, hdcMem, 0, 0, SRCCOPY);
+    bool InitD3D11(HWND hwnd, int width, int height) {
+        D3D_FEATURE_LEVEL featureLevel;
+        HRESULT hr = D3D11CreateDevice(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            nullptr, 0, D3D11_SDK_VERSION,
+            &g_d3dDevice, &featureLevel, &g_d3dContext);
+        if (FAILED(hr)) return false;
 
-    SelectObject(hdcMem, oldBmp);
-    DeleteObject(hbmMem);
-    DeleteDC(hdcMem);
-    ReleaseDC(hwnd, hdcScreen);
-}
+        ComPtr<IDXGIDevice> dxgiDevice;
+        hr = g_d3dDevice.As(&dxgiDevice);
+        if (FAILED(hr)) return false;
 
-// ---------- Процедура окна ----------
-LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        BeginPaint(hwnd, &ps);
-        DrawOverlay(hwnd);
-        EndPaint(hwnd, &ps);
-        return 0;
+        ComPtr<IDXGIAdapter> dxgiAdapter;
+        hr = dxgiDevice->GetAdapter(&dxgiAdapter);
+        if (FAILED(hr)) return false;
+
+        ComPtr<IDXGIFactory2> dxgiFactory;
+        hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+        if (FAILED(hr)) return false;
+
+        DXGI_SWAP_CHAIN_DESC1 desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc.BufferCount = 2;
+        desc.Scaling = DXGI_SCALING_STRETCH;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+
+        hr = dxgiFactory->CreateSwapChainForComposition(
+            g_d3dDevice.Get(), &desc, nullptr, &g_swapChain);
+        return SUCCEEDED(hr);
     }
-    case WM_TIMER: {
+
+    bool InitComposition(HWND hwnd) {
+        ComPtr<IDXGIDevice> dxgiDevice;
+        HRESULT hr = g_d3dDevice.As(&dxgiDevice);
+        if (FAILED(hr)) return false;
+
+        hr = DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(&g_dcompDevice));
+        if (FAILED(hr)) return false;
+
+        hr = g_dcompDevice->CreateTargetForHwnd(hwnd, TRUE, &g_dcompTarget);
+        if (FAILED(hr)) return false;
+
+        hr = g_dcompDevice->CreateVisual(&g_dcompVisual);
+        if (FAILED(hr)) return false;
+
+        hr = g_dcompVisual->SetContent(g_swapChain.Get());
+        if (FAILED(hr)) return false;
+
+        hr = g_dcompTarget->SetRoot(g_dcompVisual.Get());
+        if (FAILED(hr)) return false;
+
+        hr = g_dcompDevice->Commit();
+        return SUCCEEDED(hr);
+    }
+
+    bool CreateRTV() {
+        ComPtr<ID3D11Texture2D> backBuffer;
+        HRESULT hr = g_swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+        if (FAILED(hr)) return false;
+        return SUCCEEDED(g_d3dDevice->CreateRenderTargetView(
+            backBuffer.Get(), nullptr, &g_renderTargetView));
+    }
+
+    void UpdateOverlayPosition() {
         if (!g_targetWnd || !IsWindow(g_targetWnd)) {
-            g_running = false;
-            PostQuitMessage(0);
-            return 0;
+            g_quitRequested = true;
+            return;
         }
 
         RECT r;
@@ -148,34 +136,57 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         int newCx = r.right - r.left;
         int newCy = r.bottom - r.top;
 
-        SetWindowPos(hwnd, HWND_TOPMOST, pt.x, pt.y, newCx, newCy,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        static int lastX = -1, lastY = -1, lastCx = -1, lastCy = -1;
 
-        if (newCx != g_cx || newCy != g_cy) {
-            g_cx = newCx;
-            g_cy = newCy;
+        if (pt.x != lastX || pt.y != lastY) {
+            SetWindowPos(g_overlayWnd, HWND_TOPMOST,
+                pt.x, pt.y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE);
+            lastX = pt.x; lastY = pt.y;
         }
 
-        g_data.width = g_cx;
-        g_data.height = g_cy;
+        if (newCx != lastCx || newCy != lastCy) {
+            SetWindowPos(g_overlayWnd, HWND_TOPMOST,
+                0, 0, newCx, newCy, SWP_NOACTIVATE | SWP_NOMOVE);
 
-        InvalidateRect(hwnd, nullptr, FALSE);
-        return 0;
-    }
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    }
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-}
+            g_cx = newCx; g_cy = newCy;
 
-// ---------- Создание/уничтожение ----------
-bool CreateOverlayInternal() {
-    g_targetWnd = FindCSWindow();
-    if (!g_targetWnd) {
-        MessageBoxW(nullptr, L"Окно CS 1.6 не найдено.", L"Ошибка", MB_ICONERROR);
-        return false;
+            if (g_swapChain) {
+                g_renderTargetView.Reset();
+                g_swapChain->ResizeBuffers(0, g_cx, g_cy, DXGI_FORMAT_UNKNOWN, 0);
+                CreateRTV();
+            }
+
+            lastCx = newCx; lastCy = newCy;
+        }
     }
+
+    LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+        if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
+            return true;
+
+        switch (msg) {
+        //case WM_NCHITTEST:
+        //    if(!Menu::IsOpen())
+        //        return HTTRANSPARENT;
+        case WM_DESTROY:
+            g_quitRequested = true;
+            PostQuitMessage(0);
+            return 0;
+        }
+        return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
+} // namespace
+
+// ---------- Публичный API ----------
+bool Overlay_Init(HWND targetWnd) {
+    g_targetWnd = targetWnd;
+    if (!g_targetWnd || !IsWindow(g_targetWnd)) return false;
+
+    data.lines.reserve(512);
+    data.circles.reserve(512);
+    data.rects.reserve(512);
+    data.filledRects.reserve(512);
+    data.texts.reserve(128);
 
     RECT r;
     GetClientRect(g_targetWnd, &r);
@@ -196,67 +207,130 @@ bool CreateOverlayInternal() {
     RegisterClassW(&wc);
 
     g_overlayWnd = CreateWindowExW(
-        WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
         CLASS_NAME, L"", WS_POPUP,
         pt.x, pt.y, g_cx, g_cy,
-        nullptr, nullptr, hInstance, nullptr
-    );
+        nullptr, nullptr, hInstance, nullptr);
 
-    if (!g_overlayWnd) {
-        MessageBoxW(nullptr, L"Не удалось создать окно.", L"Ошибка", MB_ICONERROR);
-        return false;
+    if (!g_overlayWnd) return false;
+
+    if (!InitD3D11(g_overlayWnd, g_cx, g_cy)) return false;
+    if (!InitComposition(g_overlayWnd)) return false;
+    if (!CreateRTV()) return false;
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    ImGui_ImplWin32_Init(g_overlayWnd);
+    ImGui_ImplDX11_Init(g_d3dDevice.Get(), g_d3dContext.Get());
+    g_imguiInitialized = true;
+
+
+    ImFont* myFont = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/arial.ttf", 18.0f);
+
+    if (myFont) {
+        io.FontDefault = myFont;  // теперь этот шрифт — глобальный
     }
 
-    SetLayeredWindowAttributes(g_overlayWnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
+
     ShowWindow(g_overlayWnd, SW_SHOW);
     UpdateWindow(g_overlayWnd);
-    SetTimer(g_overlayWnd, 1, 5, nullptr);
+    g_quitRequested = false;
     return true;
 }
 
-void DestroyOverlayInternal() {
+void Overlay_Shutdown() {
+    if (g_imguiInitialized) {
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+        g_imguiInitialized = false;
+    }
+
+    g_renderTargetView.Reset();
+    g_dcompVisual.Reset();
+    g_dcompTarget.Reset();
+    g_dcompDevice.Reset();
+    g_swapChain.Reset();
+    g_d3dContext.Reset();
+    g_d3dDevice.Reset();
+
     if (g_overlayWnd) {
-        KillTimer(g_overlayWnd, 1);
         DestroyWindow(g_overlayWnd);
         g_overlayWnd = nullptr;
     }
     g_targetWnd = nullptr;
 }
 
-DWORD WINAPI OverlayThreadProc(LPVOID) {
-    if (!CreateOverlayInternal()) {
-        g_running = false;
-        return 1;
-    }
+bool Overlay_PumpMessages() {
     MSG msg;
-    while (g_running && GetMessage(&msg, nullptr, 0, 0)) {
+    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_QUIT) {
+            g_quitRequested = true;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-    DestroyOverlayInternal();
-    g_running = false;
-    return 0;
+    return !g_quitRequested;
 }
 
-// ---------- Публичные функции ----------
-HANDLE StartOverlayThread() {
-    if (g_running) return g_overlayThread;
-    g_running = true;
-    g_overlayThread = CreateThread(nullptr, 0, OverlayThreadProc,
-        nullptr, 0, &g_overlayThreadId);
-    return g_overlayThread;
+void Overlay_BeginFrame() {
+    UpdateOverlayPosition();
+
+    data.width = g_cx;
+    data.height = g_cy;
+
+    float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    g_d3dContext->ClearRenderTargetView(g_renderTargetView.Get(), clearColor);
+    g_d3dContext->OMSetRenderTargets(1, g_renderTargetView.GetAddressOf(), nullptr);
+
+    ImGui_ImplDX11_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
 }
 
-void StopOverlayThread() {
-    g_running = false;
-    if (g_overlayWnd) PostMessage(g_overlayWnd, WM_CLOSE, 0, 0);
-    if (g_overlayThread) {
-        WaitForSingleObject(g_overlayThread, 3000);
-        CloseHandle(g_overlayThread);
-        g_overlayThread = nullptr;
+void Overlay_EndFrame() {
+
+    // Рисуем примитивы
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+
+    for (const auto& r : data.filledRects)
+        draw->AddRectFilled(ImVec2(r.x, r.y), ImVec2(r.x + r.w, r.y + r.h), ToImU32(r.color));
+
+    for (const auto& l : data.lines)
+        draw->AddLine(ImVec2(l.x1, l.y1), ImVec2(l.x2, l.y2), ToImU32(l.color), l.thickness);
+
+    for (const auto& r : data.rects)
+        draw->AddRect(ImVec2(r.x, r.y), ImVec2(r.x + r.w, r.y + r.h),
+            ToImU32(r.color), 0.0f, ImDrawFlags_None, r.thickness);
+
+    for (const auto& c : data.circles)
+        draw->AddCircle(ImVec2(c.cx, c.cy), c.radius, ToImU32(c.color), 0, c.thickness);
+
+    for (const auto& t : data.texts) {
+        int size = WideCharToMultiByte(CP_UTF8, 0, t.text.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string utf8(size, 0);
+        WideCharToMultiByte(CP_UTF8, 0, t.text.c_str(), -1, &utf8[0], size, nullptr, nullptr);
+        draw->AddText(ImGui::GetFont(), t.size, ImVec2(t.x, t.y), ToImU32(t.color), utf8.c_str());
     }
+
+    Menu::Render();
+
+    ImGui::Render();
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    g_swapChain->Present(0, 0);
 }
 
-OverlayData& GetOverlayData() {
-    return g_data;
+HWND Overlay_GetHwnd() { return g_overlayWnd; }
+
+void SetClickThrough(bool enabled) {
+    LONG_PTR ex = GetWindowLongPtr(g_overlayWnd, GWL_EXSTYLE);
+    if (enabled) {
+        ex |= WS_EX_TRANSPARENT;
+    }
+    else {
+        ex &= ~WS_EX_TRANSPARENT;
+    }
+    SetWindowLongPtr(g_overlayWnd, GWL_EXSTYLE, ex);
 }

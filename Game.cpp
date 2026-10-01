@@ -1,8 +1,10 @@
 #include "Game.h"
 #include <iostream>
-#include <set>
+#include <unordered_set>
 
 bool wasClickSend = false;
+std::unordered_set<std::string> t_models = { "terror", "leet", "arctic", "guerilla" };
+std::unordered_set<std::string> ct_models = { "urban", "gsg9", "sas", "gign" };
 
 bool Game::FindGameProccess()
 {
@@ -28,6 +30,7 @@ bool Game::FindGameProccess()
 			offsets.InCross = client_base_addr + 0x1211f4;
 			offsets.UserInSpect = client_base_addr + 0x12B394;
 			offsets.userPV = client_base_addr + 0x11D470;
+			offsets.playerName = 0x104;
 			offsets.playerModel = 0x130;
 			offsets.playerAlive = 0x17C;
 			offsets.playerCoords = 0x188;
@@ -67,9 +70,6 @@ bool Game::UpdateGameData()
 
 	byte pState;
 
-	std::set<std::string> t_models = { "terror", "leet", "arctic", "guerilla"};
-	std::set<std::string> ct_models = { "urban", "gsg9", "sas", "gign"};
-
 	for (int i = 0; i < 32; i++)
 	{
 
@@ -103,6 +103,9 @@ bool Game::UpdateGameData()
 		std::string playerModel_s = std::string(buf);
 
 		playersInfo[i].isT = t_models.count(playerModel_s);
+
+		if (!ReadProcessMemory(hlprc, (LPCVOID)(base + offsets.playerName), &playersInfo[i].name, sizeof(playersInfo[i].name), &io))
+			return false;
 
 	}
 

@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #pragma pack(push, 1)
 // ---------- Структуры ----------
 struct Vec3 {
@@ -49,11 +51,12 @@ struct PlayerInfo {
     long lastTimePosChanged;
     bool isT;
     bool isDrawable;
+    char name[32];
 };
 
 struct Offsets {
     unsigned int InCross, UserInSpect, userPV, playerAlive, 
-        playerCoords, playerStructSize, playersArray, playerModel; 
+        playerCoords, playerStructSize, playersArray, playerModel, playerName; 
 };
 
 #pragma pack(pop)
